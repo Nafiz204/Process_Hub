@@ -3,8 +3,14 @@
 
 #include <sys/types.h>
 
-void execute_external(char **args, int background);
+pid_t execute_external(char **args, int background);
 void monitor_processes();
+
+#ifdef USE_GTK
+#include <gtk/gtk.h>
+void monitor_processes_gui(GtkListStore *store);
+#endif
+
 void fg_job(int job_id);
 void bg_job(int job_id);
 

@@ -84,3 +84,7 @@ Job* get_job_by_pid(pid_t pid) {
     }
     return NULL;
 }
+
+Job* get_job_list_head() {
+    return head;
+}

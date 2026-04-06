@@ -11,7 +11,7 @@
 
 pid_t fg_pid = 0;
 
-void execute_external(char **args, int background) {
+pid_t execute_external(char **args, int background) {
     sigset_t x;
     sigemptyset(&x);
     sigaddset(&x, SIGCHLD);
@@ -46,17 +46,23 @@ void execute_external(char **args, int background) {
             fg_pid = pid;
             sigprocmask(SIG_UNBLOCK, &x, NULL);
             
+#ifndef USE_GTK
             int status;
             // waitpid might be interrupted by signal, or child might already be reaped by SIGCHLD handler
-            // If SIGCHLD handler reaped it, waitpid will return -1 with errno ECHILD.
             if (waitpid(pid, &status, WUNTRACED) > 0) {
                 if (WIFSTOPPED(status)) {
                     add_job(pid, args[0], STOPPED);
                 }
             }
             fg_pid = 0;
+#else
+            // In GUI mode, we add it to the job list so it can be managed
+            // The GUI caller will handle the "foreground" waiting UI.
+            add_job(pid, args[0], RUNNING);
+#endif
         }
     }
+    return pid;
 }
 
 double get_system_uptime() {
@@ -201,3 +207,86 @@ void bg_job(int job_id) {
     update_job_status(job->pid, RUNNING);
     printf("[%d] %d Running %s &\n", job->job_id, job->pid, job->command);
 }
+
+#ifdef USE_GTK
+void monitor_processes_gui(GtkListStore *store) {
+    DIR *dir;
+    struct dirent *entry;
+    long hertz = sysconf(_SC_CLK_TCK);
+    long page_size_kb = sysconf(_SC_PAGESIZE) / 1024;
+    double uptime = get_system_uptime();
+
+    gtk_list_store_clear(store);
+
+    dir = opendir("/proc");
+    if (!dir) return;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (!isdigit(*entry->d_name)) continue;
+
+        char path[512];
+        snprintf(path, sizeof(path), "/proc/%s/stat", entry->d_name);
+        FILE *fp = fopen(path, "r");
+        if (!fp) continue;
+
+        char buffer[1024];
+        if (!fgets(buffer, sizeof(buffer), fp)) {
+            fclose(fp);
+            continue;
+        }
+        fclose(fp);
+
+        char *last_paren = strrchr(buffer, ')');
+        if (!last_paren) continue;
+
+        char state;
+        unsigned long utime, stime;
+        unsigned long long starttime;
+        if (sscanf(last_paren + 2, "%c %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %lu %lu %*s %*s %*s %*s %*s %*s %llu", 
+               &state, &utime, &stime, &starttime) < 4) continue;
+
+        char name[256] = "";
+        char *first_paren = strchr(buffer, '(');
+        if (first_paren && last_paren > first_paren) {
+            int len = last_paren - first_paren - 1;
+            if (len > 255) len = 255;
+            strncpy(name, first_paren + 1, len);
+            name[len] = '\0';
+        }
+
+        snprintf(path, sizeof(path), "/proc/%s/statm", entry->d_name);
+        fp = fopen(path, "r");
+        long rss = 0;
+        if (fp) {
+            if (fscanf(fp, "%*s %ld", &rss) != 1) rss = 0;
+            fclose(fp);
+        }
+
+        double total_time = (double)(utime + stime) / hertz;
+        double seconds = uptime - ((double)starttime / hertz);
+        double cpu_usage = 0;
+        if (seconds > 0) cpu_usage = (total_time / seconds) * 100.0;
+
+        char state_str[20];
+        switch (state) {
+            case 'R': strcpy(state_str, "Running"); break;
+            case 'S': strcpy(state_str, "Sleeping"); break;
+            case 'D': strcpy(state_str, "Disk Sleep"); break;
+            case 'Z': strcpy(state_str, "Zombie"); break;
+            case 'T': strcpy(state_str, "Stopped"); break;
+            default: snprintf(state_str, sizeof(state_str), "%c", state); break;
+        }
+
+        GtkTreeIter iter;
+        gtk_list_store_append(store, &iter);
+        gtk_list_store_set(store, &iter,
+                           0, atoi(entry->d_name),
+                           1, state_str,
+                           2, name,
+                           3, cpu_usage,
+                           4, rss * page_size_kb,
+                           -1);
+    }
+    closedir(dir);
+}
+#endif
