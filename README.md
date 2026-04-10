@@ -22,8 +22,7 @@ A high-performance, modular process management suite for Linux, featuring both a
 ### Prerequisites
 Ensure you have the following installed on your Linux system:
 - `gcc` (GNU Compiler Collection)
-- `make`
-- `libgtk-3-dev` (for the GUI version)
+- `libgtk-3-dev` (For the GUI version)
 
 ### Building the Project
 Clone the repository and run the provided Makefile:
