@@ -24,5 +24,6 @@ void update_job_status(pid_t pid, job_status status);
 void list_jobs();
 Job* get_job_by_id(int job_id);
 Job* get_job_by_pid(pid_t pid);
+Job* get_job_list_head();
 
 #endif
