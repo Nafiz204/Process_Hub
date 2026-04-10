@@ -3,7 +3,7 @@
 
 #include <sys/types.h>
 
-pid_t execute_external(char **args, int background);
+pid_t execute_external(char **args, int background, int *out_fd);
 void monitor_processes();
 
 #ifdef USE_GTK

@@ -101,7 +101,7 @@ void shell_mode() {
         } else if (is_builtin(args[0])) {
             handle_builtin(args);
         } else {
-            execute_external(args, background);
+            execute_external(args, background, NULL);
         }
     }
     printf("--- Exiting PM Shell Mode ---\n");
